@@ -1,0 +1,7 @@
+bin
+temp
+*.user
+*.db
+.vs
+*.opendb
+*.aps
