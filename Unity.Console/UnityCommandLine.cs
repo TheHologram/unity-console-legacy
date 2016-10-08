@@ -88,12 +88,29 @@ namespace Unity.Console
             Commands["set"] = new Commands.SetCommand(this);
             Commands["let"] = new Commands.LetCommand(this);
             Commands["reset"] = new Commands.ResetCommand(this);
+            Commands["exec"] = new Commands.ExecCommand(this);
             Commands["clear"] = new Commands.ClearCommand(this);
         }
 
         public IConsole Console => _console;
         public Dictionary<string, object> Variables { get; } = new Dictionary<string, object>(StringComparer.CurrentCultureIgnoreCase);
         internal Dictionary<string, ICommand> Commands { get; } = new Dictionary<string, ICommand>(StringComparer.CurrentCultureIgnoreCase);
+
+        internal void ExecuteScript(StreamReader reader, bool showOutput)
+        {
+            bool suppressed = Console.SuppressOutput;
+            try
+            {
+                Console.SuppressOutput = !showOutput;
+
+                for (var line = reader.ReadLine(); line != null; line = reader.ReadLine())
+                    ExecuteLine(line);
+            }
+            finally
+            {
+                Console.SuppressOutput = suppressed;
+            }
+        }
 
         protected override int? ExecuteLine(string s)
         {

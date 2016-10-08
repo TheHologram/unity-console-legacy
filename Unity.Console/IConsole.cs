@@ -22,6 +22,7 @@ namespace Microsoft.Scripting.Hosting.Shell {
         // The console can ignore this argument if it does not want to support auto-indentation
         string ReadLine(int autoIndentSize);
 
+        bool SuppressOutput { get; set; }
         void Write(string text, Style style);
         void WriteLine(string text, Style style);
         void WriteLine();

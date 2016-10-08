@@ -188,6 +188,7 @@ namespace UC
         public TextWriter ErrorOutput { get; set; }
         protected AutoResetEvent CtrlCEvent { get; set; }
         protected Thread CreatingThread { get; set; }
+        public bool SuppressOutput { get; set; } = false;
 
         private ConsoleColor _infoColor;
         private ConsoleColor _promptColor;
@@ -268,61 +269,6 @@ namespace UC
             Driver.Clear();
         }
 
-        private bool GetOptionsOlder()
-        {
-            int len;
-            for (len = _input.Length; len > 0; len--)
-            {
-                char c = _input[len - 1];
-                if (!Char.IsLetterOrDigit(c) || c != '.' || c != '_')
-                    break;
-            }
-
-            string name = _input.ToString(len, _input.Length - len);
-            if (name.Trim().Length > 0)
-            {
-                int lastDot = name.LastIndexOf('.');
-                string attr, pref, root;
-                if (lastDot < 0)
-                {
-                    attr = String.Empty;
-                    pref = name;
-                    root = _input.ToString(0, len);
-                }
-                else
-                {
-                    attr = name.Substring(0, lastDot);
-                    pref = name.Substring(lastDot + 1);
-                    root = _input.ToString(0, len + lastDot + 1);
-                }
-
-                try
-                {
-                    var result = String.IsNullOrEmpty(attr)
-                        ? _commandLine.GetGlobals(name)
-                        : _commandLine.GetMemberNames(attr);
-
-                    _options.Root = root;
-                    foreach (string option in result)
-                    {
-                        if (option.StartsWith(pref, StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            _options.Add(option);
-                        }
-                    }
-                }
-                catch
-                {
-                    _options.Clear();
-                }
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
         private bool GetOptions()
         {
             _options.Clear();
@@ -336,7 +282,6 @@ namespace UC
                 return true;
             }
             return false;
-            //return GetOptionsOlder();
         }
 
         private void SetInput(string line)
@@ -473,6 +418,8 @@ namespace UC
 
         private void Render()
         {
+            if (SuppressOutput) return;
+
             _cursor.Reset();
             StringBuilder output = new StringBuilder();
             int position = -1;
@@ -787,6 +734,8 @@ namespace UC
 
         protected void WriteColor(TextWriter output, string str, ConsoleColor c)
         {
+            if (SuppressOutput) return;
+
 #if !SILVERLIGHT // Console.ForegroundColor
             ConsoleColor origColor = Driver.ForegroundColor;
             Driver.ForegroundColor = c;

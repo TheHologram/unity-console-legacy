@@ -56,7 +56,7 @@ namespace Unity.Console.Commands
                     : (IEnumerable<string>)Owner.GetTypeNames(typename)
                     ;
                 var partialNames = Owner.GetPartialStringList(typename, options);
-                if (partialNames.Count == 1)
+                if (partialNames.Count == 1 && string.IsNullOrEmpty(partialNames[0]))
                 {
                     WriteInfo(typename, isVariable);
                 }

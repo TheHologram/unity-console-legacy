@@ -29,7 +29,8 @@ namespace Unity.Console
             var path = new StringBuilder(260);
             GetModuleFileName(IntPtr.Zero, path, path.Capacity);
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
-            var iniPath = Path.GetFullPath( Path.Combine(Path.GetDirectoryName(path.ToString()), @"Console.ini"));
+            var rootPath = Path.GetFullPath(Path.GetDirectoryName(path.ToString()));
+            var iniPath = Path.GetFullPath( Path.Combine(rootPath, @"Console.ini"));
 
             StringBuilder sb = new StringBuilder(4096);
             if (0 < GetPrivateProfileString("Mono", "AutoCompleteAssemblies", "", sb, sb.Capacity, iniPath))
@@ -38,13 +39,14 @@ namespace Unity.Console
                     if (!cmdline.AddAssembly(asmname))
                         stdwriter.WriteLine("Error adding assembly: " + asmname);
             }
-            //else
-            //{
-            //    if (!cmdline.AddAssembly("Assembly-CSharp-firstpass"))
-            //        stdwriter.WriteLine("Error adding assembly");
-            //}
 
-            UnityConsole console = new UnityConsole(cmdline);
+            if (0 < GetPrivateProfileString("Mono", "ScriptsFolders", ".", sb, sb.Capacity, iniPath))
+            {
+                foreach (var scname in sb.ToString().Split(";".ToCharArray(), StringSplitOptions.RemoveEmptyEntries))
+                    Commands.ExecCommand.ScriptFolders.Add(Path.IsPathRooted(scname)? scname: Path.Combine(rootPath, scname));
+            }
+
+            var console = new UnityConsole(cmdline);
             cmdline.Run(console);
         }
 
