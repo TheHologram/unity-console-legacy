@@ -39,6 +39,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CommandLine.cs" />
+    <Compile Include="Commands\ResetCommand.cs" />
+    <Compile Include="Commands\ClearCommand.cs" />
+    <Compile Include="Commands\LetCommand.cs" />
+    <Compile Include="Commands\SetCommand.cs" />
+    <Compile Include="Commands\GetCommand.cs" />
+    <Compile Include="Commands\HelpCommand.cs" />
+    <Compile Include="Commands\BaseMethodCommand.cs" />
+    <Compile Include="Commands\CallCommand.cs" />
+    <Compile Include="Commands\ListCommand.cs" />
+    <Compile Include="ICommand.cs" />
     <Compile Include="IConsole.cs" />
     <Compile Include="InternalStream.cs" />
     <Compile Include="Program.cs" />

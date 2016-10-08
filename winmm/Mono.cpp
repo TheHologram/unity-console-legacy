@@ -142,11 +142,6 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 	SetConsoleCP(65001);
 	SetConsoleOutputCP(65001);
 
-	//HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	//DWORD nWritten = 0;
-	//LPCSTR txt1 = "Testing 1\n";
-	//WriteFile(hOut, txt1, strlen(txt1), &nWritten, nullptr);
-
 	std::list<MonoAssembly*> loaded_images;
 	MonoThread* thread = nullptr;
 	try
@@ -205,9 +200,6 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 				FindClose(hFind);
 			}
 		}
-		//hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-		//LPCSTR txt2 = "Testing 2\n";
-		//WriteFile(hOut, txt2, strlen(txt2), &nWritten, nullptr);
 
 		next_token = nullptr;
 		// this heavily manipulates the buffer is is therefore single use
@@ -262,15 +254,9 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 		//for (std::list<MonoImage*>::iterator itr = loaded_images.begin(); itr != loaded_images.end(); ++itr) {
 		//	mono.mono_image_close(*itr);
 		//}
-		//hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-		//LPCSTR txt3 = "Testing 3\n";
-		//WriteFile(hOut, txt3, strlen(txt3), &nWritten, nullptr);
 	}
 	catch(...)
 	{
-		//hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-		//LPCSTR txt4 = "Testing 4\n";
-		//WriteFile(hOut, txt4, strlen(txt4), &nWritten, nullptr);
 	}
 
 	try
@@ -290,15 +276,6 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 
 	hConsoleThread = nullptr;
 
-	//CPipeServer *pw = new CPipeServer();
-	//pw->Start();
-	//DataCollectorThread = 0;
-	//delete pw;
-
-	//if (SuicideThread)
-	//	TerminateThread(SuicideThread, 0);
-	//Sleep(1000);
-	//FreeLibraryAndExitThread(g_hInstance, 0);
 	return 0;
 }
 

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
+﻿
 namespace Winmm.Test
 {
     internal class InternalClass
@@ -28,6 +23,7 @@ namespace Winmm.Test
     {
         public static int Field;
         public static int Property { get; set; }
+        public static string StringProperty { get; set; }
 
         public static int Method()
         {
@@ -38,6 +34,7 @@ namespace Winmm.Test
         {
             Field = 42;
             Property = 42;
+            StringProperty = "Hi";
         }
     }
 }

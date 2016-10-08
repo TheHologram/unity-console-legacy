@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
 using Microsoft.Scripting.Hosting.Shell;
 
@@ -75,188 +76,59 @@ namespace Unity.Console
         }
         #endregion
 
-        string[] commands = { "call", "get", "set", "list", "clear", "help" };
         List<Type> types = new List<Type>();
-        
+
+        public UnityCommandLine()
+        {
+            //commands["call"] = new 
+            Commands["help"] = new Commands.HelpCommand(this);
+            Commands["list"] = new Commands.ListCommand(this);
+            Commands["call"] = new Commands.CallCommand(this);
+            Commands["get"] = new Commands.GetCommand(this);
+            Commands["set"] = new Commands.SetCommand(this);
+            Commands["let"] = new Commands.LetCommand(this);
+            Commands["reset"] = new Commands.ResetCommand(this);
+        }
+
+        public IConsole Console => _console;
+        public Dictionary<string, object> Variables { get; } = new Dictionary<string, object>(StringComparer.CurrentCultureIgnoreCase);
+        internal Dictionary<string, ICommand> Commands { get; } = new Dictionary<string, ICommand>(StringComparer.CurrentCultureIgnoreCase);
+
         protected override int? ExecuteLine(string s)
         {
             string[] args = ParseLine(s);
             if (args.Length == 0) return 0;
+
             var arg0 = args[0].ToLower();
-            if (arg0.StartsWith("help") || arg0.StartsWith("?"))
+
+            switch (arg0)
             {
-                _console.WriteLine("help  - Display this help", Style.Info);
-                _console.WriteLine("call  - Call Object Static method", Style.Info);
-                _console.WriteLine("get   - Get field or property value", Style.Info);
-                _console.WriteLine("set   - Set field or property value", Style.Info);
-                _console.WriteLine("list  - List Properties and Methods of class", Style.Info);
-                _console.WriteLine("clear - Clear screen", Style.Info);
-                _console.WriteLine("^Z    - Close Console (Control-Z + Enter)", Style.Info);
-                return 0;
+                case "?":
+                    arg0 = "help";
+                    break;
+
+                case "logout":
+                case "quit":
+                case "exit":
+                {
+                    _console.WriteLine("Use ^Z (Control-Z) + Enter to close console. ", Style.Warning);
+                    _console.WriteLine("  - Careful though as it may not be possible open console again", Style.Info);
+                    return 0;
+                    //throw new ShutdownConsoleException();
+                }
+                case "cls":
+                case "clr":
+                    arg0 = "clear";
+                    break;
             }
-            if (Array.IndexOf(commands, arg0) < 0)
+
+            ICommand cmd;
+            if (!Commands.TryGetValue(arg0, out cmd))
             {
                 _console.WriteLine("Unknown command: " + arg0, Style.Error);
                 return 0;
             }
-            if (arg0 == "exit")
-            {
-                _console.WriteLine("Use ^Z (Control-Z) + Enter to close console. ", Style.Warning);
-                _console.WriteLine("  - Careful though as it may not be possible open console again", Style.Info);
-                return 0;
-                //throw new ShutdownConsoleException();
-            }
-            if (arg0 == "cls" || arg0 == "clear" || arg0 == "clr")
-            {
-                _console.Clear();
-                return 0;
-            }
-            if (arg0 == "list" && args.Length == 1)
-            {
-                foreach (var type in types)
-                    _console.WriteLine("  " + type.FullName, Style.Info);
-                return 0;
-            }
-            if (args.Length < 2)
-            {
-                _console.WriteLine("Insufficient arguments", Style.Error);
-                return 0;
-            }
-            var arg1 = args[1];
-            var arg2 = args.Length >=3 ? args[2] : "";
-            Type t;
-            if (!TryGetType(arg1, out t))
-            {
-                _console.WriteLine("Unable to resolve type: " + arg1, Style.Error);
-                return 0;
-            }
-            var argCount = args.Length - 3;
-            switch (arg0)
-            {
-                case "call":
-                    {
-                        var memberList = GetMethodsExact(t, arg2);
-                        if (memberList.Count == 0)
-                        {
-                            _console.WriteLine("Unable to resolve method: " + arg2, Style.Error);
-                            return 0;
-                        }
-                        bool found = false;
-                        MethodInfo member = null;
-                        foreach (MethodInfo method in memberList)
-                        {
-                            if (method.GetParameters().Length == argCount)
-                            {
-                                member = method;
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found)
-                        {
-                            _console.WriteLine("Unable to resolve method arguments: " + arg2, Style.Error);
-                            return 0;
-                        }
-                        object[] methodargs = new object[argCount];
-                        var parameters = member.GetParameters();
-                        for (int index = 0; index < parameters.Length; index++)
-                        {
-                            var parameter = parameters[index];
-                            methodargs[index] = Convert.ChangeType(args[3 + index], parameter.ParameterType);
-                        }
-                        var result = member.Invoke(null, methodargs);
-                        PrintResult(result);
-                        break;
-                    }
-
-                case "get":
-                    {
-                        if (argCount != 0)
-                        {
-                            _console.WriteLine("Too many arguments for get request", Style.Error);
-                            return 0;
-                        }
-                        bool found = false;
-                        object result = null;
-                        var propList = GetMethodsSpecial(t, "get_" + arg2);
-                        if (propList.Count > 0)
-                        {
-                            var property = propList[0];
-                            result = property.Invoke(null, new object[0]);
-                            found = true;
-                        }
-                        var fieldList = GetFieldsExact(t, arg2, BindingFlags.GetField);
-                        if (fieldList.Count > 0)
-                        {
-                            var field = fieldList[0];
-                            result = field.GetValue(null);
-                            found = true;
-                        }
-                        if (found)
-                        {
-                            PrintResult(result);
-                            return 0;
-                        }
-                        _console.WriteLine("Unable to resolve property: " + arg2, Style.Error);
-                        return 0;
-                    }
-                case "set":
-                    {
-                        if (argCount != 1)
-                        {
-                            _console.WriteLine("Insufficient arguments for set request", Style.Error);
-                            return 0;
-                        }
-                        var valueString = args[3];
-                        var methodList = GetMethodsSpecial(t, "set_" + arg2);
-                        if (methodList.Count > 0)
-                        {
-                            var propList = GetPropertiesExact(t, arg2, BindingFlags.SetProperty);
-                            if (propList.Count > 0)
-                            {
-                                var property = propList[0];
-                                var method = methodList[0];
-                                var value = Convert.ChangeType(valueString, property.PropertyType);
-                                method.Invoke(null, new object[] { value });
-                                PrintResult(value);
-                                return 0;
-                            }
-                        }
-                        var fieldList = GetFieldsExact(t, arg2, BindingFlags.GetField);
-                        if (fieldList.Count > 0)
-                        {
-                            var field = fieldList[0];
-                            var value = Convert.ChangeType(valueString, field.FieldType);
-                            field.SetValue(null, value);
-                            PrintResult(value);
-                            return 0;
-                        }
-                        _console.WriteLine("Unable to resolve property: " + arg2, Style.Error);
-                        return 0;
-                    }
-
-                case "list":
-                    {
-                        const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-                        foreach (var method in t.GetMethods(defaultFlags | BindingFlags.InvokeMethod))
-                            if (!method.IsSpecialName && !method.IsGenericMethod)
-                            {
-                                _console.Write(string.Format("call {0} {1,-16}", t.FullName, method.Name), Style.Info);
-                                foreach ( var parameter in method.GetParameters())
-                                    _console.Write(string.Format("\t {0} [{1}]", parameter.Name, parameter.ParameterType.Name), Style.Info);
-                                _console.WriteLine();
-                            }
-                        foreach (var field in t.GetFields(defaultFlags | BindingFlags.GetField))
-                            if (!field.IsSpecialName)
-                                _console.WriteLine(string.Format("get  {0} {1,-16}\t {2}", t.FullName, field.Name, field.FieldType.Name), Style.Info);
-                        foreach (var property in t.GetProperties(defaultFlags | BindingFlags.GetProperty))
-                            if (!property.IsSpecialName)
-                                _console.WriteLine(string.Format("get  {0} {1,-16}\t {2}", t.FullName, property.Name, property.PropertyType.Name), Style.Info);
-                        return 0;
-                    }
-
-            }
-            return 0;
+            return cmd.ExecuteLine(args);
         }
 
         static string EscapeString(string s)
@@ -334,13 +206,14 @@ namespace Unity.Console
                 output.Write("null");
                 return;
             }
+            Type t = result.GetType();
 
             if (result is Array)
             {
-                Array a = (Array)result;
-                int lower = a.GetLowerBound(0);
-                int top = a.GetUpperBound(0);
-                for (int i = lower; i <= top; i++)
+                var a = (Array)result;
+                var lower = a.GetLowerBound(0);
+                var top = a.GetUpperBound(0);
+                for (var i = lower; i <= top; i++)
                 {
                     var value = a.GetValue(i);
                     if (value == null) continue;
@@ -364,50 +237,67 @@ namespace Unity.Console
             }
             else if (result is string)
             {
-                output.Write("\"{0}\"", EscapeString((string)result));
+                output.Write("\"{0}\"", result);
             }
             else if (result is IDictionary)
             {
                 IDictionary dict = (IDictionary)result;
-                int top = dict.Count, count = 0;
-
-                output.Write("{");
+                int top = dict.Count;
                 foreach (DictionaryEntry entry in dict)
                 {
-                    count++;
-                    output.Write("{ ");
                     PrettyPrint(output, entry.Key);
-                    output.Write(", ");
+                    output.Write(": ");
                     PrettyPrint(output, entry.Value);
-                    if (count != top)
-                        output.Write(" }, ");
-                    else
-                        output.Write(" }");
                 }
-                output.Write("}");
             }
             else if (result is IEnumerable)
             {
-                int i = 0;
-                output.Write("{ ");
-                foreach (object item in (IEnumerable)result)
-                {
-                    if (i++ != 0)
-                        output.Write(", ");
+                foreach (object item in (IEnumerable) result) {
                     PrettyPrint(output, item);
                 }
-                output.Write(" }");
             }
             else if (result is char)
             {
                 EscapeChar(output, (char)result);
+            }
+            else if (t.IsPrimitive || t.IsValueType)
+            {
+                output.Write(result.ToString());
+            }
+            else if (t.IsClass)
+            {
+                output.WriteLine(t.FullName);
+                int width = 5;
+                var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var pi = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetProperty);
+                foreach (var f in fi)
+                    width = Math.Max(width, f.Name.Length);
+                foreach (var p in pi)
+                    width = Math.Max(width, p.Name.Length);
+                string format = string.Format("{{0,-{0}}} : ", width);
+                foreach (var p in pi)
+                {
+                    MethodInfo mi;
+                    if (TryGetMethodSpecial(t, true, "get_" + p.Name, out mi))
+                    {
+                        output.Write(format, p.Name);
+                        PrettyPrint(output, mi.Invoke(result, new object[0]));
+                        output.WriteLine();
+                    }
+                }
+                foreach (var f in fi)
+                {
+                    output.Write(format, f.Name);
+                    PrettyPrint(output, f.GetValue(result));
+                    output.WriteLine();
+                }
             }
             else
             {
                 output.Write(result.ToString());
             }
         }
-        private void PrintResult(object result)
+        public void PrintResult(object result)
         {
             if (result != null)
             {
@@ -444,7 +334,7 @@ namespace Unity.Console
             return false;
         }
 
-        private List<string> GetPartialStringList(string startswith, IEnumerable<string> options)
+        internal List<string> GetPartialStringList(string startswith, IEnumerable<string> options)
         {
             var list = new List<string>();
             foreach (var option in options)
@@ -457,162 +347,84 @@ namespace Unity.Console
 
         public override bool TryGetOptions(StringBuilder input, out IEnumerable<string> options)
         {
-            options = null;
             string line = input.ToString();
             string[] args = ParseLine(line);
             // just show commands
             if (args.Length == 0)
             {
-                options = commands;
+                options = Commands.Keys;
                 return true;
             }
             bool endswithspace = line.EndsWith(" ");
             var arg0 = args[0];
-            if (arg0.StartsWith("help"))
+            ICommand cmd;
+            if (!Commands.TryGetValue(arg0, out cmd))
+            {
+                options = GetPartialStringList(arg0, Commands.Keys);
+                return true;
+            }
+            // request space after first commands
+            if (args.Length == 1 && !endswithspace)
+            {
+                options = new[] { " " };
                 return false;
-            if (args.Length == 1)
-            {
-                // try partial match of commands
-                var list = GetPartialStringList(arg0, commands);
-                if (list.Count == 0) return false;
-                if (list.Count == 1)
-                {
-                    if (string.IsNullOrEmpty(list[0]))
-                    {
-                        options = !endswithspace ? new[] { " " } : GetTypeNames().ToArray();
-                        return true;
-                    }
-                }
-                options = list;
-                return true;
             }
-            string arg1 = args[1];
-            if (args.Length == 2) // handle types in commands
-            {
-                var list = GetPartialStringList(arg1, GetTypeNames(arg1));
-                if (list.Count == 0) return false;
-                if (list.Count == 1)
-                {
-                    if (string.IsNullOrEmpty(list[0]))
-                    {
-                        if (!endswithspace)
-                        {
-                            options = new[] { " " };
-                            return true;
-                        }
-                        Type t;
-                        if (TryGetType(arg1, out t))
-                        {
-                            options = GetMemberNameList(t, arg0);
-                            return true;
-                        }
-                        return false;
-                    }
-                }
-                options = list;
-                return true;
-            }
-            if (args.Length == 3)
-            {
-                var arg2 = args[2];
-                Type t;
-                if (TryGetType(arg1, out t))
-                {
-                    var list = GetPartialStringList(arg2, GetMemberNameList(t, arg0));
-                    if (list.Count == 0) return false;
-                    options = list;
-                    return true;
-                }
-            }
-            return false;
+            return cmd.TryGetOptions(args, endswithspace, out options);
         }
 
-        private static IList<MethodInfo> GetMethodsExact(Type t, string arg0)
+        internal IList<MethodInfo> GetMethodsSpecial(Type t, bool isInstance, string arg0)
         {
-            const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
+            BindingFlags flags = isInstance ? BindingFlags.Instance : BindingFlags.Static;
             var list = new List<MethodInfo>();
-            foreach (var method in t.GetMethods(defaultFlags | BindingFlags.InvokeMethod))
-                if (!method.IsSpecialName && !method.IsGenericMethod && method.Name.Equals(arg0, StringComparison.CurrentCultureIgnoreCase))
-                    list.Add(method);
-            return list;
-        }
-        private static IList<MethodInfo> GetMethodsSpecial(Type t, string arg0)
-        {
-            const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-            var list = new List<MethodInfo>();
-            foreach (var method in t.GetMethods(defaultFlags | BindingFlags.InvokeMethod))
+            foreach (var method in t.GetMethods(DefaultBindingFlags | BindingFlags.InvokeMethod | flags))
                 if (method.IsSpecialName && !method.IsGenericMethod && method.Name.Equals(arg0, StringComparison.CurrentCultureIgnoreCase))
                     list.Add(method);
             return list;
         }
 
-        private static IList<FieldInfo> GetFieldsExact(Type t, string arg0, BindingFlags flags)
+        internal bool TryGetMethodSpecial(Type t, bool isInstance, string arg0, out MethodInfo mi)
         {
-            const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-            var list = new List<FieldInfo>();
-            foreach (var method in t.GetFields(defaultFlags | flags))
-                if (!method.IsSpecialName && method.Name.Equals(arg0, StringComparison.CurrentCultureIgnoreCase))
-                    list.Add(method);
-            return list;
+            BindingFlags flags = isInstance ? BindingFlags.Instance : BindingFlags.Static;
+            var list = new List<MethodInfo>();
+            foreach (var method in t.GetMethods(DefaultBindingFlags | BindingFlags.InvokeMethod | flags))
+                if (method.IsSpecialName && !method.IsGenericMethod &&
+                    method.Name.Equals(arg0, StringComparison.CurrentCultureIgnoreCase))
+                {
+                    mi = method;
+                    return true;
+                }
+            mi = null;
+            return false;
         }
 
-        private static IList<PropertyInfo> GetPropertiesExact(Type t, string arg0, BindingFlags flags)
+        const BindingFlags DefaultBindingFlags = BindingFlags.NonPublic | BindingFlags.Public;
+
+        internal void AppendMethods(List<MemberInfo> list, Type t, BindingFlags flags)
         {
-            const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-            var list = new List<PropertyInfo>();
-            foreach (var method in t.GetProperties(defaultFlags | flags))
-                if (!method.IsSpecialName && method.Name.Equals(arg0, StringComparison.CurrentCultureIgnoreCase))
+            foreach (var method in t.GetMethods(DefaultBindingFlags | flags | BindingFlags.InvokeMethod))
+                if (!method.IsSpecialName && !method.IsGenericMethod)
                     list.Add(method);
-            return list;
         }
 
-        private static IEnumerable<MemberInfo> GetMemberList(Type t, string arg0)
+        internal void AppendProperties(List<MemberInfo> list, Type t, BindingFlags flags)
         {
-            const BindingFlags defaultFlags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-            var list = new List<MemberInfo>();
-            switch (arg0)
-            {
-                case "call":
-                    foreach (var method in t.GetMethods(defaultFlags | BindingFlags.InvokeMethod))
-                        if (!method.IsSpecialName && !method.IsGenericMethod)
-                            list.Add(method);
-                    break;
-                case "set":
-                    foreach (var method in t.GetFields(defaultFlags | BindingFlags.SetField))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    foreach (var method in t.GetProperties(defaultFlags | BindingFlags.SetProperty))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    break;
-                case "get":
-                    foreach (var method in t.GetFields(defaultFlags | BindingFlags.GetField))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    foreach (var method in t.GetProperties(defaultFlags | BindingFlags.GetProperty))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    break;
-                case "list":
-                    foreach (var method in t.GetMethods(defaultFlags | BindingFlags.InvokeMethod))
-                        if (!method.IsSpecialName && !method.IsGenericMethod)
-                            list.Add(method);
-                    foreach (var method in t.GetFields(defaultFlags | BindingFlags.GetField))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    foreach (var method in t.GetProperties(defaultFlags | BindingFlags.GetProperty))
-                        if (!method.IsSpecialName)
-                            list.Add(method);
-                    break;
-            }
-            return list;
+            foreach (var method in t.GetProperties(DefaultBindingFlags | flags))
+                if (!method.IsSpecialName)
+                    list.Add(method);
         }
-        private static IEnumerable<string> GetMemberNameList(Type t, string arg0)
+
+        internal void AppendFields(List<MemberInfo> list, Type t, BindingFlags flags)
         {
-            var list = new List<string>();
-            foreach (var x in GetMemberList(t, arg0))
-                list.Add(x.Name);
-            return list;
+            foreach (var method in t.GetFields(DefaultBindingFlags | flags))
+                if (!method.IsSpecialName)
+                    list.Add(method);
+        }
+
+        internal IEnumerable<string> GetMemberNames(IEnumerable<MemberInfo> members)
+        {
+            if (members != null)
+                foreach (var x in members)
+                    yield return x.Name;
         }
 
         protected override bool IsCompleteOrInvalid(string code)
@@ -624,7 +436,7 @@ namespace Unity.Console
         {
             try
             {
-                var asmlist = System.AppDomain.CurrentDomain.GetAssemblies();
+                var asmlist = AppDomain.CurrentDomain.GetAssemblies();
                 foreach (var asm in asmlist)
                 {
                     var nm = asm.GetName();
@@ -635,8 +447,117 @@ namespace Unity.Console
             }
             catch
             {
+                // ignored
             }
             return false;
+        }
+
+        [Flags]
+        public enum TypeOptions
+        {
+            Method = 0x1,
+            Field = 0x2,
+            GetProperty = 0x4,
+            SetProperty = 0x8,
+            All = Method|Field|GetProperty,
+        }
+
+        public IEnumerable<MemberInfo> GetMembers(Type t, bool instance, TypeOptions flags)
+        {
+            return instance ? GetInstanceMembers(t, flags) : GetStaticMembers(t, flags);
+        }
+
+        public IEnumerable<MemberInfo> GetStaticMembers(Type t, TypeOptions flags)
+        {
+
+            var members = new List<MemberInfo>();
+            if ((flags & TypeOptions.Method) != 0)
+                AppendMethods(members, t, BindingFlags.Static);
+            if ((flags & TypeOptions.Field) != 0)
+                AppendFields(members, t, BindingFlags.Static | BindingFlags.GetField);
+            if ((flags & TypeOptions.GetProperty) != 0)
+                AppendProperties(members, t, BindingFlags.Static | BindingFlags.GetProperty);
+            if ((flags & TypeOptions.SetProperty) != 0)
+                AppendProperties(members, t, BindingFlags.Static | BindingFlags.SetProperty);
+            return members;
+        }
+
+        public IEnumerable<MemberInfo> GetInstanceMembers(Type t, TypeOptions flags)
+        {
+            var members = new List<MemberInfo>();
+            if ((flags & TypeOptions.Method) != 0)
+                AppendMethods(members, t, BindingFlags.Instance);
+            if ((flags & TypeOptions.Field) != 0)
+                AppendFields(members, t, BindingFlags.Instance | BindingFlags.GetField);
+            if ((flags & TypeOptions.GetProperty) != 0)
+                AppendProperties(members, t, BindingFlags.Instance | BindingFlags.GetProperty);
+            if ((flags & TypeOptions.SetProperty) != 0)
+                AppendProperties(members, t, BindingFlags.Instance | BindingFlags.SetProperty);
+            return members;
+        }
+
+        public bool TryGetArgumentType(string typename, out object value, out Type t)
+        {
+            var isVariable = typename.StartsWith("$");
+            if (isVariable)
+            {
+                if (Variables.TryGetValue(typename, out value))
+                {
+                    t = value.GetType();
+                    return true;
+                }
+            }
+            else
+            {
+                value = null;
+                return TryGetType(typename, out t);
+            }
+            t = null;
+            return false;
+        }
+
+        internal bool AppendRegexFromWildcard(StringBuilder sb, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
+            bool special = false;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                switch (c)
+                {
+                    case '*':
+                        sb.Append(".*");
+                        special = true;
+                        break;
+                    case '?':
+                        sb.Append('.');
+                        special = true;
+                        break;
+                    case '\\':
+                        if (i < value.Length - 1)
+                            sb.Append(System.Text.RegularExpressions.Regex.Escape(value[++i].ToString()));
+                        break;
+                    default:
+                        sb.Append(System.Text.RegularExpressions.Regex.Escape(value[i].ToString()));
+                        break;
+                }
+            }
+            return special;
+        }
+
+        public System.Text.RegularExpressions.Regex BuildRegexFromWildcard(string wildcard, bool caseInsensitive)
+        {
+            var sb = new StringBuilder();
+            AppendRegexFromWildcard(sb, wildcard);
+            var options = System.Text.RegularExpressions.RegexOptions.Singleline;
+            if (caseInsensitive) options |= System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+            return new System.Text.RegularExpressions.Regex(sb.ToString(), options);
+        }
+
+        public System.Text.RegularExpressions.Regex BuildRegexFromWildcard(string wildcard)
+        {
+            return BuildRegexFromWildcard(wildcard, true);
         }
     }
 }

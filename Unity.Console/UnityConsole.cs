@@ -755,7 +755,7 @@ namespace UC
 
             if (colorful)
             {
-                _infoColor = PickColor(ConsoleColor.Gray, ConsoleColor.White);
+                _infoColor = PickColor(ConsoleColor.White, ConsoleColor.White);
                 _promptColor = PickColor(ConsoleColor.Gray, ConsoleColor.White);
                 _outColor = PickColor(ConsoleColor.Green, ConsoleColor.White);
                 _errorColor = PickColor(ConsoleColor.Red, ConsoleColor.White);
