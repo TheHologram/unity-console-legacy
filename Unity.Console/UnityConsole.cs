@@ -657,6 +657,8 @@ namespace UC
                         // If no input prefix, simply print tab.
                         DisplayNextOption(key, prefix);
                         inputChanged = true;
+                        if (prefix && _options.Count == 1) // only one option
+                            optionsObsolete = true;
                         break;
                     }
                     case ConsoleKey.UpArrow:

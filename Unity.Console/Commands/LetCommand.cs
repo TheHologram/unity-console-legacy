@@ -166,7 +166,7 @@ namespace Unity.Console.Commands
                     }
                 }
                 Owner.Variables[valuename] = result;
-                Owner.PrintResult(result);
+                //Owner.PrintResult(result);
             }
             return 0;
         }

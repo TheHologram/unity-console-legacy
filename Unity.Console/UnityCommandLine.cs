@@ -88,6 +88,7 @@ namespace Unity.Console
             Commands["set"] = new Commands.SetCommand(this);
             Commands["let"] = new Commands.LetCommand(this);
             Commands["reset"] = new Commands.ResetCommand(this);
+            Commands["clear"] = new Commands.ClearCommand(this);
         }
 
         public IConsole Console => _console;
@@ -210,23 +211,7 @@ namespace Unity.Console
 
             if (result is Array)
             {
-                var a = (Array)result;
-                var lower = a.GetLowerBound(0);
-                var top = a.GetUpperBound(0);
-                for (var i = lower; i <= top; i++)
-                {
-                    var value = a.GetValue(i);
-                    if (value == null) continue;
-
-                    if (i == lower)
-                    {
-                        output.Write(new string(' ', 5));
-                        PrettyPrintArrayHeader(output, value);
-                        output.WriteLine();
-                    }
-                    PrettyPrintArrayItem(output, i, value);
-                }
-
+                PrettyPrintArray(output, (Array)result);
             }
             else if (result is bool)
             {
@@ -266,37 +251,82 @@ namespace Unity.Console
             }
             else if (t.IsClass)
             {
-                output.WriteLine(t.FullName);
-                int width = 5;
-                var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var pi = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetProperty);
-                foreach (var f in fi)
-                    width = Math.Max(width, f.Name.Length);
-                foreach (var p in pi)
-                    width = Math.Max(width, p.Name.Length);
-                string format = string.Format("{{0,-{0}}} : ", width);
-                foreach (var p in pi)
-                {
-                    MethodInfo mi;
-                    if (TryGetMethodSpecial(t, true, "get_" + p.Name, out mi))
-                    {
-                        output.Write(format, p.Name);
-                        PrettyPrint(output, mi.Invoke(result, new object[0]));
-                        output.WriteLine();
-                    }
-                }
-                foreach (var f in fi)
-                {
-                    output.Write(format, f.Name);
-                    PrettyPrint(output, f.GetValue(result));
-                    output.WriteLine();
-                }
+                PrettyPrintClass(output, result);
             }
             else
             {
                 output.Write(result.ToString());
             }
         }
+
+        private void PrettyPrintArray(TextWriter output, Array a)
+        {
+            bool first = true;
+            var lower = a.GetLowerBound(0);
+            var top = a.GetUpperBound(0);
+            for (var i = lower; i <= top; i++)
+            {
+                var value = a.GetValue(i);
+                if (value == null) continue;
+
+                if (first)
+                {
+                    first = false;
+                    output.Write(new string(' ', 5));
+                    PrettyPrintArrayHeader(output, value);
+                    output.WriteLine();
+                }
+                PrettyPrintArrayItem(output, i, value);
+            }
+        }
+
+        private void PrettyPrintClass(TextWriter output, object result)
+        {
+            Type t = result.GetType();
+
+            output.WriteLine(t.FullName);
+            int width = 5;
+            var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var pi = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetProperty);
+            foreach (var f in fi)
+                width = Math.Max(width, f.Name.Length);
+            foreach (var p in pi)
+                width = Math.Max(width, p.Name.Length);
+            string format = string.Format("{{0,-{0}}} : ", width);
+            foreach (var p in pi)
+            {
+                MethodInfo mi;
+                if (TryGetMethodSpecial(t, true, "get_" + p.Name, out mi))
+                {
+                    output.Write(format, p.Name);
+                    var val = mi.Invoke(result, new object[0]);
+                    if (val != null)
+                    {
+                        var vt = val.GetType();
+                        if (vt.IsPrimitive)
+                            PrettyPrint(output, val);
+                        else
+                            PrettyPrint(output, val.ToString());
+                    }
+                    output.WriteLine();
+                }
+            }
+            foreach (var f in fi)
+            {
+                output.Write(format, f.Name);
+                var val = f.GetValue(result);
+                if (val != null)
+                {
+                    var vt = val.GetType();
+                    if (vt.IsPrimitive)
+                        PrettyPrint(output, val);
+                    else
+                        PrettyPrint(output, val.ToString());
+                }
+                output.WriteLine();
+            }
+        }
+
         public void PrintResult(object result)
         {
             if (result != null)

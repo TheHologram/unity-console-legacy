@@ -101,10 +101,9 @@ namespace Unity.Console.Commands
                     if (method.IsSpecialName) continue;
                     if (!isPartial || partialmatch.IsMatch(method.Name))
                     {
-                        console.Write(string.Format("call {0} {1,-16}", typename, method.Name), Style.Info);
+                        console.Write(string.Format("call {0} {1}", typename, method.Name), Style.Info);
                         foreach (var parameter in method.GetParameters())
-                            console.Write(string.Format("\t {0} [{1}]", parameter.Name, parameter.ParameterType.Name),
-                                Style.Info);
+                            console.Write(string.Format(" <{0} [{1}]>", parameter.Name, parameter.ParameterType.Name),Style.Info);
                         console.WriteLine();
                     }
                 }
@@ -136,14 +135,19 @@ namespace Unity.Console.Commands
             }
 
             string arg1 = args[1];
+            bool isVariable = arg1.StartsWith("$");
+
             Type t;
             object value;
             if (!Owner.TryGetArgumentType(arg1, out value, out t))
             {
-                return false;
+                var list = new List<string>();
+                options = isVariable
+                    ? Owner.GetPartialStringList(arg1, Owner.Variables.Keys)
+                    : Owner.GetPartialStringList(arg1, Owner.GetTypeNames(arg1));
+                return true;
             }
 
-            bool isVariable = arg1.StartsWith("$");
 
             // handle variable or types names in commands
             if (args.Length == 2)

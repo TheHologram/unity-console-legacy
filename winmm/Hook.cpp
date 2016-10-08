@@ -435,10 +435,21 @@ void HandleMonoInit()
 	//MessageBox(nullptr, "About to load", "Loading", MB_OK);
 	if (nullptr == GetConsoleWindow())
 	{
+		HWND h_foreground = GetForegroundWindow();
+		HWND h_active_hwnd = GetActiveWindow();
+		HWND h_focus_hwnd = GetFocus();
+
 		AllocConsole();
 
 		mono_init();
 		mono_launch(szLoadImages, szLoadClasses);
+
+		if (h_foreground != nullptr)
+			SetForegroundWindow(h_foreground);
+		if (h_active_hwnd != nullptr)
+			SetActiveWindow(h_active_hwnd);
+		if (h_focus_hwnd != nullptr)
+			SetFocus(h_focus_hwnd);
 	}
 }
 

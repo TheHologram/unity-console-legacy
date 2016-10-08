@@ -75,19 +75,31 @@ namespace Unity.Console.Commands
             }
             if (!foundMember)
             {
-                console.Write("Unable to resolve find method: ", Style.Error);
+                console.Write("Unable to resolve method: ", Style.Error);
                 console.Write(membername, Style.Warning);
                 console.WriteLine();
                 return 0;
             }
             else if (!foundExact)
             {
-                console.Write("Unable to resolve find method ", Style.Error);
+                console.Write("Unable to resolve method ", Style.Error);
                 console.Write(membername, Style.Warning);
                 console.Write(" with ", Style.Error);
                 console.Write(argCount.ToString(), Style.Warning);
-                console.Write(" arguments", Style.Error);
+                console.Write(" arguments.  The following are available:", Style.Error);
                 console.WriteLine();
+
+                foreach (MethodInfo method in methods)
+                {
+                    if (method.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        console.Write(string.Format("call {0} {1}", typename, method.Name), Style.Info);
+                        foreach (var parameter in method.GetParameters())
+                            console.Write(string.Format(" <{0} [{1}]>", parameter.Name, parameter.ParameterType.Name),Style.Info);
+                        console.WriteLine();
+                    }
+                }
+
                 return 0;
             }
 
