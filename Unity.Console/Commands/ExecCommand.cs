@@ -66,14 +66,15 @@ namespace Unity.Console.Commands
             {
                 ScriptFolders.Add(Directory.GetCurrentDirectory());
             }
-
             var names = new List<string>();
             foreach (var path in ScriptFolders)
             {
                 if (Directory.Exists(path))
                 {
                     foreach (var file in Directory.GetFiles(path, "*.sc", SearchOption.TopDirectoryOnly))
+                    {
                         names.Add(Path.GetFileNameWithoutExtension(file));
+                    }
                 }
             }
             if (args.Length == 1 && endswithspace)

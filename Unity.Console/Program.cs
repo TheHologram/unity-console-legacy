@@ -39,11 +39,15 @@ namespace Unity.Console
                     if (!cmdline.AddAssembly(asmname))
                         stdwriter.WriteLine("Error adding assembly: " + asmname);
             }
-
+            sb.Length = 0;
+            sb.Capacity = 4096;
             if (0 < GetPrivateProfileString("Mono", "ScriptsFolders", ".", sb, sb.Capacity, iniPath))
             {
                 foreach (var scname in sb.ToString().Split(";".ToCharArray(), StringSplitOptions.RemoveEmptyEntries))
-                    Commands.ExecCommand.ScriptFolders.Add(Path.IsPathRooted(scname)? scname: Path.Combine(rootPath, scname));
+                {
+                    var scpath = Path.IsPathRooted(scname) ? scname : Path.Combine(rootPath, scname);
+                    Commands.ExecCommand.ScriptFolders.Add(scpath);
+                }
             }
 
             var console = new UnityConsole(cmdline);
