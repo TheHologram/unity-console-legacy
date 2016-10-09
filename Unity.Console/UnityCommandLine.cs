@@ -80,7 +80,6 @@ namespace Unity.Console
 
         public UnityCommandLine()
         {
-            //commands["call"] = new 
             Commands["help"] = new Commands.HelpCommand(this);
             Commands["list"] = new Commands.ListCommand(this);
             Commands["call"] = new Commands.CallCommand(this);
@@ -104,7 +103,7 @@ namespace Unity.Console
                 Console.SuppressOutput = !showOutput;
 
                 for (var line = reader.ReadLine(); line != null; line = reader.ReadLine())
-                    ExecuteLine(line);
+                    ExecuteLine(line.Trim());
             }
             finally
             {
@@ -114,6 +113,8 @@ namespace Unity.Console
 
         protected override int? ExecuteLine(string s)
         {
+            if (s.StartsWith(";")) return 0;
+
             string[] args = ParseLine(s);
             if (args.Length == 0) return 0;
 
