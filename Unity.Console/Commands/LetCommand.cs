@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -86,7 +87,7 @@ namespace Unity.Console.Commands
             {
                 int idx;
                 var membername = args[4];
-                if (isVariable && instance is Array && (membername.StartsWith("$") || int.TryParse(membername, out idx)))
+                if (isVariable && instance is ICollection)
                 {
                     --ArgOffset;
                     result = instance;
@@ -152,19 +153,7 @@ namespace Unity.Console.Commands
             }
             if (found)
             {
-                for (int index = ArgOffset; index < args.Length; index++)
-                {
-                    var arg = args[index];
-                    if (result == null)
-                        break;
-                    int idx = 0;
-                    if (result is Array && int.TryParse(arg, out idx))
-                    {
-                        var arr = (Array)result;
-                        if (arr.Rank == 1)
-                            result = arr.GetValue(idx);
-                    }
-                }
+                result = ProcessValueArgs(result, args, ArgOffset);
                 Owner.Variables[valuename] = result;
                 //Owner.PrintResult(result);
             }

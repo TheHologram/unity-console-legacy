@@ -231,6 +231,11 @@ namespace Unity.Console
             {
                 PrettyPrintArray(output, (Array)result);
             }
+            else if (result is ArraySegment)
+            {
+                var seg = (ArraySegment) result;
+                PrettyPrintArray(output, seg.Array, seg.Offset, seg.Count);
+            }
             else if (result is bool)
             {
                 if ((bool)result)
@@ -279,22 +284,41 @@ namespace Unity.Console
 
         private void PrettyPrintArray(TextWriter output, Array a)
         {
-            bool first = true;
-            var lower = a.GetLowerBound(0);
-            var top = a.GetUpperBound(0);
-            for (var i = lower; i <= top; i++)
+            if (a.Rank == 1)
             {
-                var value = a.GetValue(i);
-                if (value == null) continue;
+                PrettyPrintArray(output, a, 0, a.Length);
+            }
+            else
+            {
+                PrettyPrintArray(output, a, 0, -1);
+            }            
+        }
 
-                if (first)
+        private void PrettyPrintArray(TextWriter output, Array a, int offset, int count)
+        {
+            bool first = true;
+            if (a.Rank == 1)
+            {
+                var lower = a.GetLowerBound(0) + offset;
+                var top = Math.Min(a.GetUpperBound(0), lower + count);
+                for (var i = lower; i <= top; i++)
                 {
-                    first = false;
-                    output.Write(new string(' ', 5));
-                    PrettyPrintArrayHeader(output, value);
-                    output.WriteLine();
+                    var value = a.GetValue(i);
+                    if (value == null) continue;
+
+                    if (first)
+                    {
+                        first = false;
+                        output.Write(new string(' ', 5));
+                        PrettyPrintArrayHeader(output, value);
+                        output.WriteLine();
+                    }
+                    PrettyPrintArrayItem(output, i-offset, value);
                 }
-                PrettyPrintArrayItem(output, i, value);
+            }
+            else
+            {
+                PrintResult(a);
             }
         }
 

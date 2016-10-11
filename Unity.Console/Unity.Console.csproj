@@ -38,6 +38,7 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ArraySegment.cs" />
     <Compile Include="CommandLine.cs" />
     <Compile Include="Commands\ExecCommand.cs" />
     <Compile Include="Commands\ResetCommand.cs" />

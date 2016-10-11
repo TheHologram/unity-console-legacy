@@ -127,6 +127,34 @@ Unity-Console is a Debug Console hook for Unity
     id      : 0
     name    : "first"
     value   : 1234
+    
+    >>> ; 
+    >>> let $e = MMInternalClass Array 1..2
+    >>> get $e
+    Result:
+         id               name             value
+    [ 0] 1                second           12
+    [ 1] 2                third            13
+
+    >>> let $f = $e 0..0
+    >>> get $f
+    Result:
+         id               name             value
+    [ 0] 1                second           12
+
+    >>> let $f = $e 1..1
+    >>> get $f
+    Result:
+         id               name             value
+    [ 0] 2                third            13
+
+    >>> get $f 0
+    Result:
+    InnerStruct
+    strProp : "third"
+    id      : 2
+    name    : "third"
+    value   : 13
 
 ==========================================================================
 5. TODO

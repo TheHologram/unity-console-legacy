@@ -1,20 +1,19 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Text;
+using System.Runtime.Serialization;
 using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
-    abstract class BaseMethodCommand 
+    internal abstract class BaseMethodCommand
     {
         public BaseMethodCommand(UnityCommandLine owner)
         {
             Owner = owner;
         }
 
-        public UnityCommandLine Owner { get; private set; }
+        public UnityCommandLine Owner { get; }
 
         protected abstract UnityCommandLine.TypeOptions TypeOptions { get; }
 
@@ -47,21 +46,21 @@ namespace Unity.Console.Commands
                 return true;
             }
 
-            string arg1 = args[offset];
-            bool isVariable = arg1.StartsWith("$");
+            var arg1 = args[offset];
+            var isVariable = arg1.StartsWith("$");
             object value;
             Type t;
             if (!Owner.TryGetArgumentType(arg1, out value, out t))
             {
                 var list = new List<string>();
-                options = isVariable 
-                    ? Owner.GetPartialStringList(arg1, Owner.Variables.Keys) 
+                options = isVariable
+                    ? Owner.GetPartialStringList(arg1, Owner.Variables.Keys)
                     : Owner.GetPartialStringList(arg1, Owner.GetTypeNames(arg1));
                 return true;
             }
 
             // handle variable or types names in commands
-            if (args.Length == offset+1)
+            if (args.Length == offset + 1)
             {
                 var methods = isVariable
                     ? Owner.GetInstanceMembers(t, TypeOptions)
@@ -71,9 +70,9 @@ namespace Unity.Console.Commands
             }
 
             // handle method names in commands
-            if (args.Length == offset+2)
+            if (args.Length == offset + 2)
             {
-                var membername = args[offset+1];
+                var membername = args[offset + 1];
 
                 var methods = isVariable
                     ? Owner.GetInstanceMembers(t, TypeOptions)
@@ -88,6 +87,91 @@ namespace Unity.Console.Commands
                 }
             }
             return false;
+        }
+
+        internal static object ProcessValueArgs(object obj, string[] args, int offset)
+        {
+            for (var index = offset; index < args.Length; index++)
+            {
+                var arg = args[index];
+                if (obj == null)
+                    break;
+                var idx = 0;
+                int aoff = 0, alast = -1;
+                if (obj is ArraySegment)
+                {
+                    var seg = (ArraySegment) obj;
+                    obj = seg.Array;
+                    aoff = seg.Offset;
+                    alast = seg.Count + seg.Offset;
+                }
+                if (obj is Array)
+                {
+                    var arr = (Array) obj;
+                    if (arr.Rank == 1 && alast == -1)
+                        alast = arr.Length - 1;
+                    if (arr.Rank == 1 && arg.Contains(".."))
+                    {
+                        var span = arg.Split(new[] {'.'}, StringSplitOptions.RemoveEmptyEntries);
+                        if (span.Length == 2)
+                        {
+                            int first, last;
+                            if (int.TryParse(span[0], out first) && int.TryParse(span[1], out last))
+                            {
+                                obj = new ArraySegment(arr, first + aoff, last - first);
+                            }
+                        }
+                    }
+                    else if (arr.Rank == args.Length - index)
+                    {
+                        var indices = new int[arr.Rank];
+                        indices[0] = aoff;
+                        for (var j = 0; j < arr.Rank && index < args.Length; index++, j++)
+                        {
+                            arg = args[index];
+                            if (int.TryParse(arg, out idx))
+                                indices[j] += idx;
+                        }
+                        if (indices[0]<aoff || indices[0] > alast) throw new IndexOutOfRangeException();
+                        obj = arr.GetValue(indices);
+                    }
+                }
+                else if (obj is IList)
+                {
+                    var list = (IList) obj;
+                    if (int.TryParse(arg, out idx))
+                    {
+                        obj = list[idx];
+                    }
+                }
+                else if (obj is IDictionary)
+                {
+                    var dict = (IDictionary)obj;
+                    if ( dict.Contains(arg) )
+                        obj = dict[arg];
+                    else if (int.TryParse(arg, out idx))
+                    {
+                        if (dict.Contains(idx))
+                            obj = dict[idx];
+                    }
+                }
+                else if (obj is ICollection)
+                {
+                    if (int.TryParse(arg, out idx))
+                    {
+                        int i = 0;
+                        foreach (var val in (ICollection) obj)
+                        {
+                            if (i++ == idx)
+                            {
+                                obj = val;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            return obj;
         }
     }
 }
