@@ -269,6 +269,11 @@ namespace UC
             Driver.Clear();
         }
 
+        public void ClearInput()
+        {
+            SetInput("");
+        }
+
         private bool GetOptions()
         {
             _options.Clear();
@@ -651,6 +656,12 @@ namespace UC
                         break;
                 }
             }
+        }
+
+        public void Abort()
+        {
+            ClearInput();
+            Driver.Abort();
         }
 
         /// <summary>

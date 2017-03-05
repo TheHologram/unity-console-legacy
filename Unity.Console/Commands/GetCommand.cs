@@ -1,16 +1,14 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("get")]
     class GetCommand : BaseMethodCommand, ICommand
     {
-        public GetCommand(UnityCommandLine owner) : base(owner) {}
+        public GetCommand(UnityCommandLine owner) : base(owner) { }
 
         protected override UnityCommandLine.TypeOptions TypeOptions => UnityCommandLine.TypeOptions.Field | UnityCommandLine.TypeOptions.GetProperty;
 
@@ -41,7 +39,7 @@ namespace Unity.Console.Commands
             }
             var typename = args[1];
             bool isVariable = typename.StartsWith("$");
-        
+
             object instance = null;
             Type t = null;
             if (!Owner.TryGetArgumentType(typename, out instance, out t))
@@ -64,65 +62,46 @@ namespace Unity.Console.Commands
                     return 0;
                 }
             }
-            int ArgOffset = 3;
+
+            if (instance == null)
+                instance = t;
             bool found = false;
             object result = null;
-            if (args.Length >= ArgOffset)
+            int idx = 2;
+            var arg = args[idx];
+            if (arg.StartsWith("$"))
             {
-                int idx;
-                var membername = args[2];
-                if (isVariable && instance is ICollection )
+                idx++;
+                if (!Owner.TryGetVariable(arg, out instance))
                 {
-                    --ArgOffset;
-                    result = instance;
+                    console.Write("Unable to resolve variable: ", Style.Error);
+                    console.Write(arg, Style.Warning);
+                    console.WriteLine();
+                    return 1;
+                }
+            }
+            for (; idx < args.Length; ++idx)
+            {
+                if (ProcessProperty(instance, args, ref idx, out result))
+                {
+                    instance = result;
                     found = true;
                 }
                 else
                 {
-                    foreach (PropertyInfo prop in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.GetProperty))
-                    {
-                        if (prop.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            var propList = Owner.GetMethodsSpecial(t, isVariable, "get_" + prop.Name);
-                            if (propList.Count > 0)
-                            {
-                                var property = propList[0];
-                                result = property.Invoke(instance, new object[0]);
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        foreach (FieldInfo field in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.Field))
-                        {
-                            if (field.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
-                            {
-                                result = field.GetValue(instance);
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        console.Write("Unable to resolve find field or property: ", Style.Error);
-                        console.Write(membername, Style.Warning);
-                        console.WriteLine();
-                        return 0;
-                    }
+                    found = false;
+                    break;
                 }
             }
             if (found)
             {
-                // possible array
-                result = ProcessValueArgs(result, args, ArgOffset);
                 Owner.PrintResult(result);
+                SetResult(result);
                 return 0;
             }
             return 0;
         }
+
         
         public bool TryGetOptions(string[] args, bool endswithspace, out IEnumerable<string> options)
         {

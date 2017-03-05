@@ -3,9 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Runtime.Remoting.Messaging;
 using System.Text;
 using Microsoft.Scripting.Hosting.Shell;
+using Unity.Console.Behaviors;
 
 namespace Unity.Console
 {
@@ -88,14 +88,41 @@ namespace Unity.Console
             Commands["let"] = new Commands.LetCommand(this);
             Commands["reset"] = new Commands.ResetCommand(this);
             Commands["exec"] = new Commands.ExecCommand(this);
+            Commands["sync"] = new Commands.SyncCommand(this);
+            Commands["sleep"] = new Commands.SleepCommand(this);
             Commands["clear"] = new Commands.ClearCommand(this);
+        }
+
+        public void RegisterAssembly(Assembly asm)
+        {
+            if (asm == null) return;
+            try
+            {
+                foreach (var type in asm.GetTypes())
+                {
+                    foreach (CommandAttribute attr in type.GetCustomAttributes(typeof(CommandAttribute), false))
+                    {
+                        ICommand inst = null;
+                        var ci = type.GetConstructor(new[] { typeof(UnityCommandLine) });
+                        inst = ci.Invoke(new object[] { this }) as ICommand;
+                        if (inst != null)
+                            Commands[attr.Description] = inst;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine("ERROR: " + ex.Message);
+            }
         }
 
         public IConsole Console => _console;
         public Dictionary<string, object> Variables { get; } = new Dictionary<string, object>(StringComparer.CurrentCultureIgnoreCase);
-        internal Dictionary<string, ICommand> Commands { get; } = new Dictionary<string, ICommand>(StringComparer.CurrentCultureIgnoreCase);
+        public Dictionary<string, ICommand> Commands { get; } = new Dictionary<string, ICommand>(StringComparer.CurrentCultureIgnoreCase);
 
-        internal void ExecuteScript(StreamReader reader, bool showOutput)
+        public bool Synchronize { get; set; }
+
+        public void ExecuteScript(StreamReader reader, bool showOutput)
         {
             bool suppressed = Console.SuppressOutput;
             try
@@ -110,10 +137,54 @@ namespace Unity.Console
                 Console.SuppressOutput = suppressed;
             }
         }
+        public void ExecuteScript(IEnumerable<string> lines, bool showOutput)
+        {
+            bool suppressed = Console.SuppressOutput;
+            try
+            {
+                Console.SuppressOutput = !showOutput;
+                foreach(var line in lines)
+                    ExecuteLine(line.Trim());
+            }
+            finally
+            {
+                Console.SuppressOutput = suppressed;
+            }
+        }
+
+        #region Interactivity
+
+        public int RunWithStartup(IConsole console, string[] lines)
+        {
+            _console = console;
+            Initialize();
+
+            try
+            {
+                if (lines != null && lines.Length > 0)
+                    ExecuteScript(lines, true);
+                return RunInteractive();
+            }
+            catch (System.Threading.ThreadAbortException)
+            {
+                //if (tae.ExceptionState is KeyboardInterruptException)
+                //{
+                //    Thread.ResetAbort();
+                //}
+                return -1;
+            }
+            finally
+            {
+                Shutdown();
+                _console = null;
+            }
+        }
+
+        #endregion
 
         protected override int? ExecuteLine(string s)
         {
-            if (s.StartsWith(";")) return 0;
+            if (s.StartsWith(";") || s.StartsWith("#")) return 0;
 
             string[] args = ParseLine(s);
             if (args.Length == 0) return 0;
@@ -147,7 +218,14 @@ namespace Unity.Console
                 _console.WriteLine("Unknown command: " + arg0, Style.Error);
                 return 0;
             }
-            return cmd.ExecuteLine(args);
+            if (Synchronize)
+            {
+                return FuncBehavior.Execute(cmd.ExecuteLine, args);
+            }
+            else
+            {
+                return cmd.ExecuteLine(args);
+            }
         }
 
         static string EscapeString(string s)
@@ -180,7 +258,7 @@ namespace Unity.Console
             }
         }
 
-        internal void PrettyPrintArrayHeader(TextWriter output, object result)
+        public void PrettyPrintArrayHeader(TextWriter output, object result)
         {
             if (result == null) return;
 
@@ -188,14 +266,14 @@ namespace Unity.Console
             if (t.IsClass)
             {
                 int width = _console.Width - 5;
-                var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var fi = t.GetFields(DefaultBindingFlags | BindingFlags.Instance);
                 int colWidth = Math.Min(16, Math.Max(5, ((width / fi.Length) + 1)));
                 string format = string.Format("{{0,-{0}}} ", colWidth);
                 foreach (var f in fi)
                     output.Write(format, f.Name);
             }
         }
-        internal void PrettyPrintArrayItem(TextWriter output, int i, object result)
+        public void PrettyPrintArrayItem(TextWriter output, int i, object result)
         {
             if (result == null) return;
 
@@ -204,7 +282,7 @@ namespace Unity.Console
             if (t.IsClass)
             {
                 int width = _console.Width - 5;
-                var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var fi = t.GetFields(DefaultBindingFlags | BindingFlags.Instance);
                 int colWidth = Math.Min(16, Math.Max(5, ((width / fi.Length) + 1)));
                 string format = string.Format("{{0,-{0}}} ", colWidth);
                 foreach (var f in fi)
@@ -218,7 +296,7 @@ namespace Unity.Console
             }
         }
 
-        internal void PrettyPrint(TextWriter output, object result)
+        public void PrettyPrint(TextWriter output, object result)
         {
             if (result == null)
             {
@@ -328,8 +406,8 @@ namespace Unity.Console
 
             output.WriteLine(t.FullName);
             int width = 5;
-            var fi = t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            var pi = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetProperty);
+            var fi = t.GetFields(DefaultBindingFlags | BindingFlags.Instance);
+            var pi = t.GetProperties(DefaultBindingFlags | BindingFlags.Instance | BindingFlags.GetProperty);
             foreach (var f in fi)
                 width = Math.Max(width, f.Name.Length);
             foreach (var p in pi)
@@ -402,11 +480,19 @@ namespace Unity.Console
                     return true;
                 }
             }
-            t = null;
-            return false;
+            try
+            {
+                t = Type.GetType(name, true, true);
+                return true;
+            }
+            catch
+            {
+                t = null;
+                return false;
+            }
         }
 
-        internal List<string> GetPartialStringList(string startswith, IEnumerable<string> options)
+        public List<string> GetPartialStringList(string startswith, IEnumerable<string> options)
         {
             var list = new List<string>();
             foreach (var option in options)
@@ -444,7 +530,7 @@ namespace Unity.Console
             return cmd.TryGetOptions(args, endswithspace, out options);
         }
 
-        internal IList<MethodInfo> GetMethodsSpecial(Type t, bool isInstance, string arg0)
+        public IList<MethodInfo> GetMethodsSpecial(Type t, bool isInstance, string arg0)
         {
             BindingFlags flags = isInstance ? BindingFlags.Instance : BindingFlags.Static;
             var list = new List<MethodInfo>();
@@ -454,7 +540,7 @@ namespace Unity.Console
             return list;
         }
 
-        internal bool TryGetMethodSpecial(Type t, bool isInstance, string arg0, out MethodInfo mi)
+        public bool TryGetMethodSpecial(Type t, bool isInstance, string arg0, out MethodInfo mi)
         {
             BindingFlags flags = isInstance ? BindingFlags.Instance : BindingFlags.Static;
             var list = new List<MethodInfo>();
@@ -469,30 +555,30 @@ namespace Unity.Console
             return false;
         }
 
-        const BindingFlags DefaultBindingFlags = BindingFlags.NonPublic | BindingFlags.Public;
+        const BindingFlags DefaultBindingFlags = BindingFlags.FlattenHierarchy | BindingFlags.NonPublic | BindingFlags.Public;
 
-        internal void AppendMethods(List<MemberInfo> list, Type t, BindingFlags flags)
+        public void AppendMethods(List<MemberInfo> list, Type t, BindingFlags flags)
         {
             foreach (var method in t.GetMethods(DefaultBindingFlags | flags | BindingFlags.InvokeMethod))
                 if (!method.IsSpecialName && !method.IsGenericMethod)
                     list.Add(method);
         }
 
-        internal void AppendProperties(List<MemberInfo> list, Type t, BindingFlags flags)
+        public void AppendProperties(List<MemberInfo> list, Type t, BindingFlags flags)
         {
             foreach (var method in t.GetProperties(DefaultBindingFlags | flags))
                 if (!method.IsSpecialName)
                     list.Add(method);
         }
 
-        internal void AppendFields(List<MemberInfo> list, Type t, BindingFlags flags)
+        public void AppendFields(List<MemberInfo> list, Type t, BindingFlags flags)
         {
             foreach (var method in t.GetFields(DefaultBindingFlags | flags))
                 if (!method.IsSpecialName)
                     list.Add(method);
         }
 
-        internal IEnumerable<string> GetMemberNames(IEnumerable<MemberInfo> members)
+        public IEnumerable<string> GetMemberNames(IEnumerable<MemberInfo> members)
         {
             if (members != null)
                 foreach (var x in members)
@@ -588,7 +674,48 @@ namespace Unity.Console
             return false;
         }
 
-        internal bool AppendRegexFromWildcard(StringBuilder sb, string value)
+        public object GetVariable(string name)
+        {
+            object value = null;
+            bool isVariable = name.StartsWith("$");
+            if (isVariable)
+            {
+                if (!this.Variables.TryGetValue(name, out value))
+                {
+                    this.Console.Write("Unable to resolve variable: ", Style.Error);
+                    this.Console.Write(name, Style.Warning);
+                    this.Console.WriteLine();
+                    return null;
+                }
+            }
+            else
+            {
+                value = name;
+            }
+            return value;
+        }
+
+        public bool TryGetVariable(string name, out object value)
+        {
+            bool isVariable = name.StartsWith("$");
+            if (isVariable)
+            {
+                if (!this.Variables.TryGetValue(name, out value))
+                {
+                    this.Console.Write("Unable to resolve variable: ", Style.Error);
+                    this.Console.Write(name, Style.Warning);
+                    this.Console.WriteLine();
+                    return false;
+                }
+            }
+            else
+            {
+                value = name;
+            }
+            return true;
+        }
+
+        public bool AppendRegexFromWildcard(StringBuilder sb, string value)
         {
             if (string.IsNullOrEmpty(value))
                 return false;

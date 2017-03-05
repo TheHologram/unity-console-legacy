@@ -5,6 +5,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("reset")]
     class ResetCommand : ICommand
     {
         public ResetCommand(UnityCommandLine owner)

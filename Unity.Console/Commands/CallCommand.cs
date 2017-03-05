@@ -6,6 +6,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("call")]
     class CallCommand : BaseMethodCommand, ICommand
     {
         public CallCommand(UnityCommandLine owner) : base(owner) {}
@@ -31,10 +32,15 @@ namespace Unity.Console.Commands
 
         public int? ExecuteLine(string[] args)
         {
+            return ExecuteLine(args, true);
+        }
+
+        public int? ExecuteLine(string[] args, bool printresult)
+        {
             var console = Owner.Console;
             if (args.Length <= 2)
             {
-                console.Write("Insufficient arguments", Style.Error);
+                console.WriteLine("Insufficient arguments", Style.Error);
                 return 0;
             }
             var typename = args[1];
@@ -108,10 +114,16 @@ namespace Unity.Console.Commands
             for (int index = 0; index < parameters.Length; index++)
             {
                 var parameter = parameters[index];
-                methodargs[index] = Convert.ChangeType(GetArgument(args, ArgOffset + index), parameter.ParameterType);
+                var arg = GetArgument(args, ArgOffset + index);
+                if (parameter.ParameterType.IsInstanceOfType(arg))
+                    methodargs[index] = arg;
+                else
+                    methodargs[index] = Convert.ChangeType(arg, parameter.ParameterType);
             }
             var result = member.Invoke(instance, methodargs);
-            Owner.PrintResult(result);
+            if (printresult)
+                Owner.PrintResult(result);
+            SetResult(result);
             return 0;
         }
         

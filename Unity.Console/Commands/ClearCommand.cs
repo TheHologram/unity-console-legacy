@@ -5,6 +5,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("clear")]
     class ClearCommand : ICommand
     {
         public ClearCommand(UnityCommandLine owner)

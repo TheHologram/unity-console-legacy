@@ -7,6 +7,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("list")]
     class ListCommand : ICommand
     {
         public ListCommand(UnityCommandLine owner)

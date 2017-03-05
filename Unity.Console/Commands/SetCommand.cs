@@ -7,6 +7,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("set")]
     class SetCommand : BaseMethodCommand, ICommand
     {
         public SetCommand(UnityCommandLine owner) : base(owner) {}
@@ -35,7 +36,8 @@ namespace Unity.Console.Commands
             var console = Owner.Console;
             if (args.Length <= 3)
             {
-                console.Write("Insufficient arguments", Style.Error);
+                console.WriteLine("Insufficient arguments", Style.Error);
+                ClearResult();
                 return 0;
             }
             var typename = args[1];
@@ -50,7 +52,20 @@ namespace Unity.Console.Commands
                 console.Write(isVariable ? "Unable to resolve variable: " : "Unable to resolve type: ", Style.Error);
                 console.Write(typename, Style.Warning);
                 console.WriteLine();
+                ClearResult();
                 return 1;
+            }
+            object valueObj = valueString;
+            if (valueString.StartsWith("$"))
+            {
+                if (!Owner.TryGetVariable(valueString, out valueObj))
+                {
+                    console.Write(isVariable ? "Unable to resolve variable: " : "Unable to resolve type: ", Style.Error);
+                    console.Write(typename, Style.Warning);
+                    console.WriteLine();
+                    ClearResult();
+                    return 1;
+                }
             }
 
             foreach (PropertyInfo prop in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.GetProperty))
@@ -61,9 +76,10 @@ namespace Unity.Console.Commands
                     if (propList.Count > 0)
                     {
                         var property = propList[0];
-                        var value = Convert.ChangeType(valueString, prop.PropertyType);
+                        var value = Convert.ChangeType(valueObj, prop.PropertyType);
                         property.Invoke(instance, new object[] { value });
                         Owner.PrintResult(value);
+                        ClearResult();
                         return 0;
                     }
                 }
@@ -73,10 +89,11 @@ namespace Unity.Console.Commands
             {
                 if (field.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
                 {
-                    var value = Convert.ChangeType(valueString, field.FieldType);
+                    var value = Convert.ChangeType(valueObj, field.FieldType);
                     field.SetValue(instance, value);
                     var result = field.GetValue(instance);
                     Owner.PrintResult(result);
+                    ClearResult();
                     return 0;
                 }
             }
@@ -84,6 +101,7 @@ namespace Unity.Console.Commands
             console.Write("Unable to resolve find field or property: ", Style.Error);
             console.Write(membername, Style.Warning);
             console.WriteLine();
+            ClearResult();
             return 0;
         }
         

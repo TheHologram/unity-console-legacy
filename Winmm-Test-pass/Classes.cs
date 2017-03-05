@@ -27,6 +27,8 @@ internal class MMInternalClass
         new InnerStruct() { id = 4, name = "fifth", value = 15},
     };
 
+    public static InnerStruct Nested = new InnerStruct() {id = 0, name = "nexted", value = 11};
+
     public static int Method()
     {
         return 42;

@@ -127,10 +127,11 @@ bool mono_init()
 
 struct ConsoleStartup
 {
-	CHAR LoadImages[4096];
 	CHAR LoadClasses[4096];
+	INT CodePage;
 };
 static ConsoleStartup k_startup;
+static std::list<MonoAssembly*> k_loaded_images;
 
 DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 {
@@ -139,10 +140,12 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 
 	SetConsoleTitle("Unity Debug Console");
 
-	SetConsoleCP(65001);
-	SetConsoleOutputCP(65001);
+	if (k_startup.CodePage > 0)
+	{
+		SetConsoleCP(k_startup.CodePage);
+		SetConsoleOutputCP(k_startup.CodePage);
+	}
 
-	std::list<MonoAssembly*> loaded_images;
 	MonoThread* thread = nullptr;
 	try
 	{
@@ -154,54 +157,7 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 		if (thread == nullptr)
 			return 0;
 
-		CHAR root[MAX_PATH];
-		GetModuleFileName(nullptr, root, MAX_PATH);
-		PathRemoveFileSpec(root);
-		PathAddBackslash(root);
-
 		char *next_token = nullptr;
-		for(char *file = strtok_s(k_startup.LoadImages, ";", &next_token)
-			; file  != nullptr
-			; file = strtok_s(nullptr, ";", &next_token)
-			)
-		{
-			Trim(file);
-			CHAR path[MAX_PATH];
-			CHAR search[MAX_PATH];
-			CHAR buffer[MAX_PATH];
-			PathCombine(search, root, file);
-			PathCanonicalize(path, search);
-			PathRemoveFileSpec(path);
-			PathAddBackslash(path);
-			
-			WIN32_FIND_DATA FindFileData;
-			ZeroMemory(&FindFileData, sizeof(FindFileData));
-			HANDLE hFind = FindFirstFile(file, &FindFileData);
-			if (hFind != INVALID_HANDLE_VALUE) {
-				do {
-					if (FindFileData.cFileName[0] == '.' || (FindFileData.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
-						continue;
-					else if (FindFileData.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)) {
-						continue;
-					}
-					else {
-						PathCombine(buffer, path, FindFileData.cFileName);
-						GetLongPathName(buffer, buffer, MAX_PATH);
-						if (PathFileExists(buffer)) {
-							MonoImageOpenStatus status;
-							MonoAssembly* ass = mono.mono_assembly_open(buffer, &status);
-							if (ass != nullptr) {
-								loaded_images.push_back(ass);
-							}
-						}
-					}
-				} while (FindNextFile(hFind, &FindFileData));
-
-				FindClose(hFind);
-			}
-		}
-
-		next_token = nullptr;
 		// this heavily manipulates the buffer is is therefore single use
 		for (char *klassname = strtok_s(k_startup.LoadClasses, ";", &next_token)
 			; klassname != nullptr
@@ -230,7 +186,7 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 				strcpy(clsname, klassname);
 			}
 
-			for (std::list<MonoAssembly*>::iterator itr = loaded_images.begin(); itr != loaded_images.end(); ++itr) {
+			for (std::list<MonoAssembly*>::iterator itr = k_loaded_images.begin(); itr != k_loaded_images.end(); ++itr) {
 				MonoImage* image = mono.mono_assembly_get_image(*itr);
 				if (imgname[0] != 0) {
 					if (stricmp(mono.mono_image_get_name(image), imgname) != 0)
@@ -251,7 +207,7 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 				}
 			}
 		}
-		//for (std::list<MonoImage*>::iterator itr = loaded_images.begin(); itr != loaded_images.end(); ++itr) {
+		//for (std::list<MonoImage*>::iterator itr = k_loaded_images.begin(); itr != k_loaded_images.end(); ++itr) {
 		//	mono.mono_image_close(*itr);
 		//}
 	}
@@ -279,14 +235,80 @@ DWORD WINAPI ConsoleThreadEntry(LPVOID lpThreadParameter)
 	return 0;
 }
 
-bool mono_launch(LPCSTR loadImages, LPCSTR loadClasses)
+bool mono_load_images(LPCSTR loadImages)
+{
+	MonoThread* thread = nullptr;
+	try
+	{
+		//MonoDomain* domain = mono.mono_get_root_domain();
+		//if (domain == nullptr)
+		//	return 0;
+
+		//thread = mono.mono_thread_attach(domain);
+		//if (thread == nullptr)
+		//	return 0;
+
+		CHAR root[MAX_PATH];
+		GetModuleFileName(nullptr, root, MAX_PATH);
+		PathRemoveFileSpec(root);
+		PathAddBackslash(root);
+
+		int loadImagesLen = strlen(loadImages) + 1;
+		CHAR* tokenLoadImages = (CHAR*)alloca(loadImagesLen);
+		lstrcpyn(tokenLoadImages, loadImages, loadImagesLen);
+		char *next_token = nullptr;
+		for (char *file = strtok_s(tokenLoadImages, ";", &next_token)
+			; file != nullptr
+			; file = strtok_s(nullptr, ";", &next_token)
+			)
+		{
+			Trim(file);
+			CHAR path[MAX_PATH];
+			CHAR search[MAX_PATH];
+			CHAR buffer[MAX_PATH];
+			PathCombine(search, root, file);
+			PathCanonicalize(path, search);
+			PathRemoveFileSpec(path);
+			PathAddBackslash(path);
+
+			WIN32_FIND_DATA FindFileData;
+			ZeroMemory(&FindFileData, sizeof(FindFileData));
+			HANDLE hFind = FindFirstFile(file, &FindFileData);
+			if (hFind != INVALID_HANDLE_VALUE) {
+				do {
+					if (FindFileData.cFileName[0] == '.' || (FindFileData.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
+						continue;
+					else if (FindFileData.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) {
+						continue;
+					}
+					else {
+						PathCombine(buffer, path, FindFileData.cFileName);
+						GetLongPathName(buffer, buffer, MAX_PATH);
+						if (PathFileExists(buffer)) {
+							MonoImageOpenStatus status;
+							MonoAssembly* ass = mono.mono_assembly_open(buffer, &status);
+							if (ass != nullptr) {
+								k_loaded_images.push_back(ass);
+							}
+						}
+					}
+				} while (FindNextFile(hFind, &FindFileData));
+
+				FindClose(hFind);
+			}
+		}
+	}
+	catch (...)
+	{
+	}
+}
+
+bool mono_launch(LPCSTR loadClasses, int codepage)
 {
 	if (hConsoleThread != nullptr)
 		return false;
-	k_startup.LoadImages[0] = 0;
 	k_startup.LoadClasses[0] = 0;
-	if (loadImages != nullptr)
-		lstrcpyn(k_startup.LoadImages, loadImages, sizeof(k_startup.LoadImages));
+	k_startup.CodePage = codepage;
 	if (loadClasses != nullptr)
 		lstrcpyn(k_startup.LoadClasses, loadClasses, sizeof(k_startup.LoadClasses));
 	hConsoleThread = CreateThread(nullptr, 0, ConsoleThreadEntry, &k_startup, 0, nullptr);

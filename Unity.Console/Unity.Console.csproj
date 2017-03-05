@@ -36,10 +36,19 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="UnityEngine">
+      <HintPath>..\Library\UnityEngine.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ArraySegment.cs" />
+    <Compile Include="Behaviors\AsyncBehavior.cs" />
+    <Compile Include="Behaviors\FuncBehavior.cs" />
+    <Compile Include="Behaviors\ParameterizedInvokedBehavior.cs" />
+    <Compile Include="CommandAttribute.cs" />
     <Compile Include="CommandLine.cs" />
+    <Compile Include="Commands\SleepCommand.cs" />
+    <Compile Include="Commands\SyncCommand.cs" />
     <Compile Include="Commands\ExecCommand.cs" />
     <Compile Include="Commands\ResetCommand.cs" />
     <Compile Include="Commands\ClearCommand.cs" />

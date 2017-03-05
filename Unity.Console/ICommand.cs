@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Unity.Console
 {
-    interface ICommand
+    public interface ICommand
     {
         string Description { get; }
         string Help { get; }

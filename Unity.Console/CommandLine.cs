@@ -75,6 +75,13 @@ namespace Microsoft.Scripting.Hosting.Shell {
             }
         }
 
+        public void Stop()
+        {
+            _console.Abort();
+        }
+
+
+
         /// <summary>
         /// Starts the interactive loop.  Performs any initialization necessary before
         /// starting the loop and then calls RunInteractiveLoop to start the loop.

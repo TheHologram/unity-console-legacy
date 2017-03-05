@@ -5,6 +5,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("help")]
     class HelpCommand : ICommand
     {
         public HelpCommand(UnityCommandLine owner)

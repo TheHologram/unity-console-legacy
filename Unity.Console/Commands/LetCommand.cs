@@ -8,6 +8,7 @@ using Microsoft.Scripting.Hosting.Shell;
 
 namespace Unity.Console.Commands
 {
+    [CommandAttribute("let")]
     class LetCommand : BaseMethodCommand, ICommand
     {
         public LetCommand(UnityCommandLine owner) : base(owner) {}
@@ -64,9 +65,26 @@ namespace Unity.Console.Commands
                 return 0;
             }
             var typename = args[3];
-            if (args.Length <= 4)
+            if (typename == "call") // special bypass to call a method and use result
             {
-                console.WriteLine("Insufficient arguments. Method, field or property name is missing", Style.Error);
+                ICommand cmd;
+                if (!Owner.Commands.TryGetValue(typename, out cmd))
+                {
+                    console.WriteLine("Call Command is missing", Style.Error);
+                    return 0;
+                }
+                Owner.Variables.Remove("$_");
+                var callcmd = cmd as CallCommand;
+                if (callcmd != null)
+                {
+                    object callres;
+                    var subargs = new string[args.Length - 3];
+                    Array.Copy(args, 3, subargs, 0, subargs.Length);
+                    callcmd.ExecuteLine(subargs, false);
+                    if (Owner.TryGetVariable("$_", out callres))
+                        Owner.Variables[valuename] = callres;
+                    Owner.Variables.Remove("$_");
+                }
                 return 0;
             }
             bool isVariable = typename.StartsWith("$");
@@ -75,87 +93,60 @@ namespace Unity.Console.Commands
             Type t = null;
             if (!Owner.TryGetArgumentType(typename, out instance, out t))
             {
-                console.Write(isVariable ? "Unable to resolve variable: " : "Unable to resolve type: ", Style.Error);
-                console.Write(typename, Style.Warning);
-                console.WriteLine();
-                return 1;
+                Owner.Variables[valuename] = typename;
+                Owner.Variables.Remove("$_");
+                return 0;
             }
-            int ArgOffset = 5;
+
+            if (args.Length <= 4)
+            {
+                if (isVariable)
+                {
+                    Owner.Variables[valuename] = instance;
+                    Owner.Variables.Remove("$_");
+                }
+                else
+                {
+                    console.WriteLine("Insufficient arguments. Method, field or property name is missing", Style.Error);
+                    return 0;
+                }
+            }
+            if (instance == null)
+                instance = t;
             bool found = false;
             object result = null;
-            if (args.Length >= ArgOffset)
+            int idx = 4;
+            var arg = args[idx];
+            if (arg.StartsWith("$"))
             {
-                int idx;
-                var membername = args[4];
-                if (isVariable && instance is ICollection)
+                idx++;
+                if (!Owner.TryGetVariable(arg, out instance))
                 {
-                    --ArgOffset;
-                    result = instance;
+                    console.Write("Unable to resolve variable: ", Style.Error);
+                    console.Write(arg, Style.Warning);
+                    console.WriteLine();
+                    return 1;
+                }
+            }
+            for (; idx < args.Length; ++idx)
+            {
+                if (ProcessProperty(instance, args, ref idx, out result))
+                {
+                    instance = result;
                     found = true;
                 }
-                if (!found)
-                { 
-                    foreach (MethodInfo method in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.Method))
-                    {
-                        if (method.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            int argCount = args.Length - ArgOffset;
-                            object[] methodargs = new object[argCount];
-                            var parameters = method.GetParameters();
-                            for (int index = 0; index < parameters.Length; index++)
-                            {
-                                var parameter = parameters[index];
-                                methodargs[index] = Convert.ChangeType(GetArgument(args, ArgOffset + index), parameter.ParameterType);
-                            }
-                            result = method.Invoke(instance, methodargs);
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if (!found)
+                else
                 {
-                    foreach (
-                        PropertyInfo prop in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.GetProperty))
-                    {
-                        if (prop.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            var propList = Owner.GetMethodsSpecial(t, isVariable, "get_" + typename);
-                            if (propList.Count > 0)
-                            {
-                                var property = propList[0];
-                                result = property.Invoke(instance, new object[0]);
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (!found)
-                {
-                    foreach (FieldInfo field in Owner.GetMembers(t, isVariable, UnityCommandLine.TypeOptions.Field))
-                    {
-                        if (field.Name.Equals(membername, StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            result = field.GetValue(instance);
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if (!found)
-                {
-                    console.Write("Unable to resolve find field or property: ", Style.Error);
-                    console.Write(membername, Style.Warning);
-                    console.WriteLine();
-                    return 0;
+                    found = false;
+                    break;
                 }
             }
             if (found)
             {
-                result = ProcessValueArgs(result, args, ArgOffset);
+                //result = ProcessValueArgs(result, args, idx);
                 Owner.Variables[valuename] = result;
                 //Owner.PrintResult(result);
+                Owner.Variables.Remove("$_");
             }
             return 0;
         }
@@ -188,6 +179,23 @@ namespace Unity.Console.Commands
                     }
                 }
             }
+            if (args.Length > 3)
+            {
+                var arg3 = args[3];
+                if (arg3 == "call") // special bypass to call a method and use result
+                {
+                    ICommand cmd;
+                    if (!Owner.Commands.TryGetValue(arg3, out cmd))
+                    {
+                        Owner.Console.WriteLine("Call Command is missing", Style.Error);
+                        return false;
+                    }
+                    var subargs = new string[args.Length - 3];
+                    Array.Copy(args, 2, subargs, 0, subargs.Length);
+                    return cmd.TryGetOptions(subargs, endswithspace, out options);
+                }
+            }
+
             return TryGetOptions(args, 3, endswithspace, out options);
         }
     }

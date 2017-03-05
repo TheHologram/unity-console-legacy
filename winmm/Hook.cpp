@@ -27,8 +27,13 @@ static int ShowOnce = 0;
 static CHAR szLoadImages[4096];
 static CHAR szLoadImagesSection[4096];
 static CHAR szLoadClasses[4096];
+static int CodePage = 65001;
+static AssemblyRef aAssemblyRefs[20];
+
 extern bool mono_init();
-extern bool mono_launch(LPCSTR loadImages, LPCSTR loadClasses);
+extern bool mono_load_images(LPCSTR loadImages);
+extern bool mono_launch(LPCSTR loadClasses, int codepage);
+
 
 typedef struct EnumLookupType {
 	BYTE value;
@@ -317,12 +322,13 @@ static void LoadSettings(void)
 
 	ConsoleActionDelay = GetPrivateProfileInt("Console", "ActionDelay", MaxScanTime, szIniFileName);
 	ShowOnce = GetPrivateProfileInt("Console", "ShowOnce", 0, szIniFileName);
+	CodePage = GetPrivateProfileInt("Console", "CodePage", 65001, szIniFileName);
+	ShowConsoleOnStart = GetPrivateProfileInt("Console", "ShowConsoleOnStart", 0, szIniFileName);
+	GetPrivateProfileString("Console", "RunConsole", "", szLoadClasses, sizeof(szLoadClasses), szIniFileName);
 
 	EnableMonoHook = GetPrivateProfileInt("Mono", "Enable", 0, szIniFileName);
-	GetPrivateProfileString("Mono", "Loadimages", "", szLoadImages, sizeof(szLoadImages), szIniFileName);
-	GetPrivateProfileString("Mono", "LoadOnConsole", "", szLoadClasses, sizeof(szLoadClasses), szIniFileName);
-	ShowConsoleOnStart = GetPrivateProfileInt("Mono", "ShowConsoleOnStart", 0, szIniFileName);
-
+	//GetPrivateProfileString("Mono", "Loadimages", "", szLoadImages, sizeof(szLoadImages), szIniFileName);
+	
 	if ( 0 < GetPrivateProfileSection("Mono.Images", szLoadImagesSection, sizeof(szLoadImagesSection), szIniFileName) )
 	{
 		LPSTR ptr = nullptr, next = nullptr;
@@ -442,7 +448,8 @@ void HandleMonoInit()
 		AllocConsole();
 
 		mono_init();
-		mono_launch(szLoadImages, szLoadClasses);
+		mono_load_images(szLoadImages);
+		mono_launch(szLoadClasses, CodePage);
 
 		if (h_foreground != nullptr)
 			SetForegroundWindow(h_foreground);

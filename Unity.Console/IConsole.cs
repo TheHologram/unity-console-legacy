@@ -27,6 +27,8 @@ namespace Microsoft.Scripting.Hosting.Shell {
         void WriteLine(string text, Style style);
         void WriteLine();
         void Clear();
+        void Abort();
+        void ClearInput();
 
         int Width { get; }
 

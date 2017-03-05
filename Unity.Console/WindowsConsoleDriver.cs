@@ -28,6 +28,7 @@
 //
 
 using System;
+using System.ComponentModel.Design;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -653,6 +654,46 @@ namespace UC
             return builder.ToString();
         }
 
+        public void Abort()
+        {
+            if (inputHandle == IntPtr.Zero)
+                return;
+
+            try
+            {
+                int nwrite = 0;
+                var record = new INPUT_RECORD
+                {
+                    EventType = INPUT_RECORD_TYPE.KEY_EVENT,
+                    KeyEvent =
+                {
+                    dwControlKeyState = ControlKeyStates.CTRL_PRESSED,
+                    UnicodeChar = 'z',
+                    wVirtualKeyCode = 'z',
+                    wRepeatCount = 1,
+                    bKeyDown = true
+                }
+                };
+                WriteConsoleInput(inputHandle, &record, 1, out nwrite);
+                var recordEnter = new INPUT_RECORD
+                {
+                    EventType = INPUT_RECORD_TYPE.KEY_EVENT,
+                    KeyEvent =
+                {
+                    dwControlKeyState = 0,
+                    UnicodeChar = '\r',
+                    wVirtualKeyCode = '\r',
+                    wRepeatCount = 1,
+                    bKeyDown = true
+                }
+                };
+                WriteConsoleInput(inputHandle, &recordEnter, 1, out nwrite);
+            }
+            catch 
+            {
+            }
+        }
+
         public ConsoleKeyInfo ReadKey(bool intercept)
         {
             int eventsRead;
@@ -661,20 +702,18 @@ namespace UC
             {
                 if (!ReadConsoleInput(inputHandle, out record, 1, out eventsRead))
                     throw new InvalidOperationException("Error in ReadConsoleInput " + Marshal.GetLastWin32Error());
-                //switch (record.EventType)
-                //{
-                //             case INPUT_RECORD_TYPE.KEY_EVENT:
-                //                 logWriter.WriteLine("{0}: {1} {2,-5} {3,-2} {4}", DateTime.Now.ToShortTimeString(), record.EventType, record.KeyEvent.bKeyDown, record.KeyEvent.UnicodeChar, record.KeyEvent.wVirtualKeyCode);
-                //        break;
-                //             default:
-                //                 logWriter.WriteLine("{0}: {1}", DateTime.Now.ToShortTimeString(), record.EventType);
-                //        break;
-                //}
             } while (!(record.EventType == INPUT_RECORD_TYPE.KEY_EVENT && record.KeyEvent.bKeyDown));
 
             bool alt = ((record.KeyEvent.dwControlKeyState & ControlKeyStates.ALT_PRESSED) != 0);
             bool ctrl = ((record.KeyEvent.dwControlKeyState & ControlKeyStates.CTRL_PRESSED) != 0);
             bool shift = ((record.KeyEvent.dwControlKeyState & ControlKeyStates.SHIFT_PRESSED) != 0);
+            //if (!intercept || !TreatControlCAsInput)
+            //{
+            //    if (!alt && ctrl && !shift && record.KeyEvent.UnicodeChar == 'c')
+            //        throw new exception
+
+            //}
+
             //if (record.Character == 0) return new ConsoleKeyInfo();
             return new ConsoleKeyInfo(record.KeyEvent.UnicodeChar, (ConsoleKey)record.KeyEvent.wVirtualKeyCode, shift, alt, ctrl);
         }
@@ -785,6 +824,9 @@ namespace UC
         [DllImport("kernel32.dll", EntryPoint = "ReadConsoleInput", SetLastError = true, CharSet = CharSet.Unicode)]
         extern static bool ReadConsoleInput(IntPtr handle, out INPUT_RECORD record, int length, out int nread);
 
+        [DllImport("kernel32.dll", EntryPoint = "WriteConsoleInput", SetLastError = true, CharSet = CharSet.Unicode)]
+        extern static bool WriteConsoleInput(IntPtr handle, INPUT_RECORD* buffer, int length, out int nread);
+
         [DllImport("kernel32.dll", EntryPoint = "GetLargestConsoleWindowSize", SetLastError = true, CharSet = CharSet.Unicode)]
         extern static Coord GetLargestConsoleWindowSize(IntPtr handle);
 
@@ -793,6 +835,8 @@ namespace UC
 
         [DllImport("kernel32.dll", EntryPoint = "WriteConsoleOutput", SetLastError = true, CharSet = CharSet.Unicode)]
         extern static bool WriteConsoleOutput(IntPtr handle, CharInfo[] buffer, Coord bsize, Coord bpos, ref SmallRect region);
+
+
     }
 }
 
